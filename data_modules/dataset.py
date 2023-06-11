@@ -122,7 +122,8 @@ class ClassificationDataset(Dataset):
                 features = self.create_features(sentences, self.max_input_length)
                 for (features_k, features_v) in features.items():
                     sample[features_k] = features_v
-                    
+                sample['input_ids2'] = self.tokenizer.encode(sentences, truncation=True, max_length=self.max_input_length, padding='max_length', add_special_tokens=True)
+                
             else:
                 sample[k] = []
                 for v in raw_sample[k]:

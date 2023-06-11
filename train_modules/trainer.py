@@ -5,7 +5,7 @@ import helper.logger as logger
 from train_modules.evaluation_metrics import evaluate
 import torch
 import tqdm
-
+import numpy as np
 
 class Trainer(object):
     def __init__(self, model, criterion, optimizer, scheduler, vocab, config):
@@ -59,20 +59,32 @@ class Trainer(object):
                                   batch['label'].to(self.config.train.device_setting.device),
                                   recursive_constrained_params)
             
-            loss = loss_predictor + loss_weight*text_label_mi_disc_loss + (1-loss_weight)*label_prior_loss
-            total_loss += loss.item()
+            print('classifier loss: ', loss_predictor)
+            print('text_label_mi_disc_loss: ', text_label_mi_disc_loss)
+            print('label_prior_loss: ', label_prior_loss)
 
+            loss = loss_predictor + loss_weight*text_label_mi_disc_loss + (1-loss_weight)*label_prior_loss
+            # loss = loss_predictor
+            total_loss += loss.item()
+            print('loss weight: ', loss_weight)
+            print('loss: ', loss
+                  )
             if mode == 'TRAIN':
                 if "bert" in self.config.model.type:
                     torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1, norm_type=2)
-                    self.scheduler.step()
+                    # self.scheduler.step()
                     
                 self.optimizer.zero_grad()
                 loss.backward()
                 self.optimizer.step()
+            
             predict_results = torch.sigmoid(logits).cpu().tolist()
             predict_probs.extend(predict_results)
             target_labels.extend(batch['label_list'])
+            print(np.where(np.array(predict_results[0]) > 0.5))
+            print(np.array(batch['label_list'][0]))
+            # print(np.where(np.array(batch['label_list'][0]) > 0.5))
+
         total_loss = total_loss / num_batch
         if mode == 'EVAL':
             metrics = evaluate(predict_probs,

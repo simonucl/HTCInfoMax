@@ -48,6 +48,7 @@ class Collator(object):
         batch_input_mask = []
         batch_segment_ids = []
         batch_input_len = []
+        batch_input_ids2 = []
 
         for sample in batch:
             batch_token.append(sample['token'])
@@ -58,6 +59,7 @@ class Collator(object):
             batch_input_mask.append(sample['input_mask'])
             batch_segment_ids.append(sample['segment_ids'])
             batch_input_len.append(sample['input_len'])
+            batch_input_ids2.append(sample['input_ids2'])
 
         batch_token = torch.tensor(batch_token)
         batch_multi_hot_label = self._multi_hot(batch_label)
@@ -67,6 +69,7 @@ class Collator(object):
         batch_input_mask = torch.LongTensor(batch_input_mask)
         batch_segment_ids = torch.LongTensor(batch_segment_ids)
         batch_input_len = torch.LongTensor(batch_input_len)
+        batch_input_ids2 = torch.LongTensor(batch_input_ids2)
 
         return {
             'token': batch_token,
@@ -74,6 +77,7 @@ class Collator(object):
             'token_len': batch_doc_len,
             'label_list': batch_label,
             'input_ids': batch_input_ids,
+            'input_ids2': batch_input_ids2,
             'input_mask': batch_input_mask,
             'segment_ids': batch_segment_ids,
             'input_len': batch_input_len

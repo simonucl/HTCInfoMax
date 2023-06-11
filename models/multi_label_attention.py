@@ -60,7 +60,7 @@ class HiAGMLA(nn.Module):
         self.label_feature = label_feature
 
     @staticmethod
-    def _soft_attention(text_f, label_f):
+    def _soft_attention(text_f, label_f, input_mask=None):
         """
         soft attention module
         :param text_f -> torch.FloatTensor, (batch_size, K, dim)
@@ -68,18 +68,20 @@ class HiAGMLA(nn.Module):
         :return: label_align ->  torch.FloatTensor, (batch, N, dim)
         """
         att = torch.matmul(text_f, label_f.transpose(0, 1)) # (batch_size, K, N)
+        if input_mask is not None:
+            att = att.masked_fill(input_mask.unsqueeze(2) == 0, -1e9)
+
         weight_label = functional.softmax(att.transpose(1, 2), dim=-1) # (batch_size, N, K)
         label_align = torch.matmul(weight_label, text_f)
         return label_align
 
-    def forward(self, text_feature):
+    def forward(self, text_feature, input_mask=None):
         """
         forward pass with multi-label attention
         :param text_feature ->  torch.FloatTensor, (batch_size, K0, text_dim)
         :return: logits ->  torch.FloatTensor, (batch, N)
         """
         
-
         if self.model_mode == 'TEST':
             label_feature = self.label_feature
         else:
@@ -90,8 +92,10 @@ class HiAGMLA(nn.Module):
             tree_label_feature = self.graph_model(label_embedding)
             label_feature = tree_label_feature.squeeze(0)
             
+        if input_mask is not None:
+            text_feature = text_feature.masked_fill(input_mask.unsqueeze(2) == 0, 0)
 
-        label_aware_text_feature = self._soft_attention(text_feature, label_feature)
+        label_aware_text_feature = self._soft_attention(text_feature, label_feature, input_mask)
 
         logits = self.dropout(self.linear(label_aware_text_feature.view(label_aware_text_feature.shape[0], -1)))
         # transform label feature

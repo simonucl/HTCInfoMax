@@ -34,7 +34,10 @@ class HTCInfoMax(nn.Module):
 
         if "bert" in self.config.model.type:
             self.bert = BertModel.from_pretrained("bert-base-uncased")
+            self.bert.to(self.device)
             self.bert_dropout = nn.Dropout(0.1)
+            for param in self.bert.parameters():
+                param.requires_grad = True
         else:
             self.token_embedding = EmbeddingLayer(
                 vocab_map=self.token_map,
@@ -63,7 +66,7 @@ class HTCInfoMax(nn.Module):
         self.htcinfomax = HiAGMLA(config=config,
                                  device=self.device,
                                  graph_model=self.structure_encoder,
-                                 label_map=self.index2label,
+                                 label_map=self.label_map,
                                  model_mode=model_mode)
         
     def optimize_params_dict(self):
@@ -91,10 +94,18 @@ class HTCInfoMax(nn.Module):
         :param batch: DataLoader._DataLoaderIter[Dict{'token_len': List}], each batch sampled from the current epoch
         :return: 
         """
+        input_mask = None
         if "bert" in self.config.model.type:
             outputs = self.bert(batch['input_ids'].to(self.config.train.device_setting.device), batch['segment_ids'].to(self.config.train.device_setting.device), batch['input_mask'].to(self.config.train.device_setting.device))
-            pooled_output = outputs[0]
-            token_output = self.bert_dropout(pooled_output)
+            # outputs = self.bert(batch['input_ids2'].to(self.config.train.device_setting.device))
+            hidden_last = outputs[0]
+            # encode_out = hidden_last[:, 1:, :]
+            # apply the label mask to the output of bert
+            # hidden_last = hidden_last * batch['input_mask'].unsqueeze(2).to(self.config.train.device_setting.device)
+            encode_out = hidden_last[:, 1:, :]
+            input_mask = batch['input_mask'][:, 1:].to(self.config.train.device_setting.device)
+            # encode_out = outputs[1].unsqueeze(1)
+            token_output = self.bert_dropout(encode_out)
         else:
             # get distributed representation of tokens, (batch_size, max_length, embedding_dimension)
             embedding = self.token_embedding(batch['token'].to(self.config.train.device_setting.device))
@@ -103,7 +114,7 @@ class HTCInfoMax(nn.Module):
             seq_len = batch['token_len']
             token_output = self.text_encoder(embedding, seq_len)
 
-        all_labels_feature, logits = self.htcinfomax(token_output)
+        all_labels_feature, logits = self.htcinfomax(token_output, input_mask)
 
         text_feature = token_output
         idx = np.random.permutation(text_feature.shape[0])
@@ -146,3 +157,4 @@ class HTCInfoMax(nn.Module):
         fusiongate = F.sigmoid(text_label_MI_weightlogit + labelprior_weightlogit)
 
         return text_label_mi_disc_loss, label_prior_loss, logits, fusiongate
+        return None, None, logits, None

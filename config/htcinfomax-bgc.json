@@ -1,7 +1,7 @@
 {
   "data": {
     "dataset": "bgc",
-    "data_dir": "data",
+    "data_dir": "data/bgc",
     "train_file": "bgc_train.json",
     "val_file": "bgc_val.json",
     "test_file": "bgc_test.json",
@@ -72,7 +72,7 @@
       "lr_patience": 5,
       "early_stopping": 200
     },
-    "batch_size": 32,
+    "batch_size": 64,
     "start_epoch": 0,
     "end_epoch": 200,
     "loss": {
@@ -84,7 +84,7 @@
     },
     "device_setting": {
       "device": "cuda",
-      "visible_device_list": "1",
+      "visible_device_list": "0",
       "num_workers": 10
     },
     "checkpoint": {

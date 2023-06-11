@@ -40,7 +40,7 @@ def train(config):
     corpus_vocab = Vocab(config,
                          min_freq=5,
                          max_size=50000)
-    tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', do_lower_case=False)
+    tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', do_lower_case=True)
 
     # get data
     train_loader, dev_loader, test_loader = data_loaders(config, corpus_vocab, bert_tokenizer=tokenizer)
@@ -63,13 +63,14 @@ def train(config):
                                         {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
                                         ]
         warmup_steps = int(t_total * 0.1)
-        optimizer = AdamW(optimizer_grouped_parameters, lr=config.train.optimizer.learning_rate, eps=1e-8)
+        optimizer = set_optimizer(config, htcinfomax)
         scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=warmup_steps,
                                                     num_training_steps=t_total)
     else:                                                
         optimize = set_optimizer(config, htcinfomax)
-        
-    optimizer = set_optimizer(config, htcinfomax)
+        optimizer = set_optimizer(config, htcinfomax)
+        scheduler = None
+    # optimizer = set_optimizer(config, htcinfomax)
 
     # get epoch trainer
     trainer = Trainer(model=htcinfomax,
