@@ -8,7 +8,7 @@ import tqdm
 
 
 class Trainer(object):
-    def __init__(self, model, criterion, optimizer, vocab, config):
+    def __init__(self, model, criterion, optimizer, scheduler, vocab, config):
         """
         :param model: Computational Graph
         :param criterion: train_modules.ClassificationLoss object
@@ -23,6 +23,7 @@ class Trainer(object):
         self.config = config
         self.criterion = criterion
         self.optimizer = optimizer
+        self.scheduler = scheduler
 
     def update_lr(self):
         """
@@ -62,6 +63,10 @@ class Trainer(object):
             total_loss += loss.item()
 
             if mode == 'TRAIN':
+                if "bert" in self.config.model.type:
+                    torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1, norm_type=2)
+                    self.scheduler.step()
+                    
                 self.optimizer.zero_grad()
                 loss.backward()
                 self.optimizer.step()

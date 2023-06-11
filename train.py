@@ -13,7 +13,10 @@ from train_modules.criterions import ClassificationLoss
 from train_modules. trainer import Trainer
 from helper.utils import load_checkpoint, save_checkpoint
 import time
+from helper.lr_schedulers import get_linear_schedule_with_warmup
+from helper.adamw import AdamW
 
+from transformers import BertTokenizer
 
 def set_optimizer(config, model):
     """
@@ -37,9 +40,10 @@ def train(config):
     corpus_vocab = Vocab(config,
                          min_freq=5,
                          max_size=50000)
+    tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', do_lower_case=False)
 
     # get data
-    train_loader, dev_loader, test_loader = data_loaders(config, corpus_vocab)
+    train_loader, dev_loader, test_loader = data_loaders(config, corpus_vocab, bert_tokenizer=tokenizer)
 
     # build up model
     htcinfomax = HTCInfoMax(config, corpus_vocab, model_mode='TRAIN')
@@ -49,12 +53,29 @@ def train(config):
                                    corpus_vocab.v2i['label'],
                                    recursive_penalty=config.train.loss.recursive_regularization.penalty,
                                    recursive_constraint=config.train.loss.recursive_regularization.flag)
-    optimize = set_optimizer(config, htcinfomax)
+    if "bert" in config.model.type:
+        t_total = int(len(train_loader) * (config.train.end_epoch-config.train.start_epoch))
+    
+        param_optimizer = list(htcinfomax.named_parameters())
+        no_decay = ['bias', 'LayerNorm.weight']
+        optimizer_grouped_parameters = [
+                                        {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)],'weight_decay': 0.01},
+                                        {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
+                                        ]
+        warmup_steps = int(t_total * 0.1)
+        optimizer = AdamW(optimizer_grouped_parameters, lr=config.train.optimizer.learning_rate, eps=1e-8)
+        scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=warmup_steps,
+                                                    num_training_steps=t_total)
+    else:                                                
+        optimize = set_optimizer(config, htcinfomax)
+        
+    optimizer = set_optimizer(config, htcinfomax)
 
     # get epoch trainer
     trainer = Trainer(model=htcinfomax,
                       criterion=criterion,
-                      optimizer=optimize,
+                      optimizer=optimizer,
+                      scheduler=scheduler,
                       vocab=corpus_vocab,
                       config=config)
 
@@ -83,7 +104,7 @@ def train(config):
             best_performance, config = load_checkpoint(model_file=os.path.join(model_checkpoint, latest_model_file),
                                                        model=htcinfomax,
                                                        config=config,
-                                                       optimizer=optimize)
+                                                       optimizer=optimizer)
             logger.info('Previous Best Performance---- Micro-F1: {}%, Macro-F1: {}%'.format(
                 best_performance[0], best_performance[1]))
 
@@ -115,7 +136,7 @@ def train(config):
                 'model_type': config.model.type,
                 'state_dict': htcinfomax.state_dict(),
                 'best_performance': best_performance,
-                'optimizer': optimize.state_dict()
+                'optimizer': optimizer.state_dict()
             }, os.path.join(model_checkpoint, 'best_micro_' + model_name))
         if performance['macro_f1'] > best_performance[1]:
             wait = 0
@@ -127,7 +148,7 @@ def train(config):
                 'model_type': config.model.type,
                 'state_dict': htcinfomax.state_dict(),
                 'best_performance': best_performance,
-                'optimizer': optimize.state_dict()
+                'optimizer': optimizer.state_dict()
             }, os.path.join(model_checkpoint, 'best_macro_' + model_name))
 
         if epoch % 10 == 1:
@@ -136,7 +157,7 @@ def train(config):
                 'model_type': config.model.type,
                 'state_dict': htcinfomax.state_dict(),
                 'best_performance': best_performance,
-                'optimizer': optimize.state_dict()
+                'optimizer': optimizer.state_dict()
             }, os.path.join(model_checkpoint, model_name + '_epoch_' + str(epoch)))
 
         logger.info('Epoch {} Time Cost {} secs.'.format(epoch, time.time() - start_time))
@@ -145,14 +166,14 @@ def train(config):
     if os.path.isfile(best_epoch_model_file):
         load_checkpoint(best_epoch_model_file, model=htcinfomax,
                         config=config,
-                        optimizer=optimize)
+                        optimizer=optimizer)
         trainer.eval(test_loader, best_epoch[0], 'TEST')
 
     best_epoch_model_file = os.path.join(model_checkpoint, 'best_macro_' + model_name)
     if os.path.isfile(best_epoch_model_file):
         load_checkpoint(best_epoch_model_file, model=htcinfomax,
                         config=config,
-                        optimizer=optimize)
+                        optimizer=optimizer)
         trainer.eval(test_loader, best_epoch[1], 'TEST')
 
     return
@@ -160,10 +181,12 @@ def train(config):
 
 if __name__ == "__main__":
     #configs = Configure(config_json_file='config/htcinfomax-wos.json')
-    configs = Configure(config_json_file='config/htcinfomax-rcv1-v2.json')
+    configs = Configure(config_json_file=sys.argv[1])
 
     if configs.train.device_setting.device == 'cuda':
         os.system('CUDA_VISIBLE_DEVICES=' + str(configs.train.device_setting.visible_device_list))
+        os.environ["CUDA_VISIBLE_DEVICES"] = str(configs.train.device_setting.visible_device_list)
+
     else:
         os.system("CUDA_VISIBLE_DEVICES=''")
     torch.manual_seed(2020)

@@ -14,7 +14,7 @@ from models.text_label_mi_discriminator import TextLabelMIDiscriminator
 from models.labelprior_discriminator import LabelPriorDiscriminator
 import torch.nn.functional as F
 
-
+from transformers.models.bert.modeling_bert import BertPreTrainedModel, BertModel
 
 class HTCInfoMax(nn.Module):
     def __init__(self, config, vocab, model_mode='TRAIN'):
@@ -32,22 +32,26 @@ class HTCInfoMax(nn.Module):
         self.token_map, self.label_map = vocab.v2i['token'], vocab.v2i['label']
         self.index2label = vocab.i2v['label']
 
-        self.token_embedding = EmbeddingLayer(
-            vocab_map=self.token_map,
-            embedding_dim=config.embedding.token.dimension,
-            vocab_name='token',
-            config=config,
-            padding_index=vocab.padding_index,
-            pretrained_dir=config.embedding.token.pretrained_file,
-            model_mode=model_mode,
-            initial_type=config.embedding.token.init_type
-        )
+        if "bert" in self.config.model.type:
+            self.bert = BertModel.from_pretrained("bert-base-uncased")
+            self.bert_dropout = nn.Dropout(0.1)
+        else:
+            self.token_embedding = EmbeddingLayer(
+                vocab_map=self.token_map,
+                embedding_dim=config.embedding.token.dimension,
+                vocab_name='token',
+                config=config,
+                padding_index=vocab.padding_index,
+                pretrained_dir=config.embedding.token.pretrained_file,
+                model_mode=model_mode,
+                initial_type=config.embedding.token.init_type
+            )
+            self.text_encoder = TextEncoder(config)
 
         # linear layer used for learning the weights for text_label_mi loss and label_prior_matching loss
         self.labelpriorweight_linear = nn.Linear(len(self.label_map) * config.embedding.label.dimension, 1)
         self.text_label_MI_weight_linear = nn.Linear(config.embedding.label.dimension, 1)
 
-        self.text_encoder = TextEncoder(config)
         self.structure_encoder = StructureEncoder(config=config,
                                                   label_map=vocab.v2i['label'],
                                                   device=self.device,
@@ -71,8 +75,13 @@ class HTCInfoMax(nn.Module):
                           }]
         """
         params = list()
-        params.append({'params': self.text_encoder.parameters()})
-        params.append({'params': self.token_embedding.parameters()})
+        if "bert" not in self.config.model.type:
+            print(self.config.model.type)
+            params.append({'params': self.text_encoder.parameters()})
+            params.append({'params': self.token_embedding.parameters()})
+        else:
+            params.append({'params': self.bert.parameters()})
+            params.append({'params': self.bert_dropout.parameters()})
         params.append({'params': self.htcinfomax.parameters()})
         return params
 
@@ -82,13 +91,17 @@ class HTCInfoMax(nn.Module):
         :param batch: DataLoader._DataLoaderIter[Dict{'token_len': List}], each batch sampled from the current epoch
         :return: 
         """
+        if "bert" in self.config.model.type:
+            outputs = self.bert(batch['input_ids'].to(self.config.train.device_setting.device), batch['segment_ids'].to(self.config.train.device_setting.device), batch['input_mask'].to(self.config.train.device_setting.device))
+            pooled_output = outputs[0]
+            token_output = self.bert_dropout(pooled_output)
+        else:
+            # get distributed representation of tokens, (batch_size, max_length, embedding_dimension)
+            embedding = self.token_embedding(batch['token'].to(self.config.train.device_setting.device))
 
-        # get distributed representation of tokens, (batch_size, max_length, embedding_dimension)
-        embedding = self.token_embedding(batch['token'].to(self.config.train.device_setting.device))
-
-        # get the length of sequences for dynamic rnn, (batch_size, 1)
-        seq_len = batch['token_len']
-        token_output = self.text_encoder(embedding, seq_len)
+            # get the length of sequences for dynamic rnn, (batch_size, 1)
+            seq_len = batch['token_len']
+            token_output = self.text_encoder(embedding, seq_len)
 
         all_labels_feature, logits = self.htcinfomax(token_output)
 
@@ -105,7 +118,6 @@ class HTCInfoMax(nn.Module):
             else:
                 label_feature_y = torch.cat((label_feature_y, label_feature_mean), dim=0)
                 
-
         # compute the text-label mutual information maximization loss
         t = text_feature.permute(0, 2, 1)
         t_prime = negative_text.permute(0, 2, 1)

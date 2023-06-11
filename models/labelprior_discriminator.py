@@ -5,7 +5,7 @@ import torch.nn.functional as F
 class LabelPriorDiscriminator(nn.Module):
     def __init__(self):
         super().__init__()
-        self.l0 = nn.Linear(300, 1000)
+        self.l0 = nn.Linear(768, 1000)
         self.l1 = nn.Linear(1000, 200)
         self.l2 = nn.Linear(200, 1)
 

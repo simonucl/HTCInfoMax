@@ -5,9 +5,9 @@ import torch.nn.functional as F
 class TextLabelMIDiscriminator(nn.Module):
     def __init__(self):
         super().__init__()
-        self.c0 = nn.Conv1d(300, 300, kernel_size=3)
-        self.c1 = nn.Conv1d(300, 512, kernel_size=3)
-        self.l0 = nn.Linear(512 + 300, 512)
+        self.c0 = nn.Conv1d(768, 768, kernel_size=3)
+        self.c1 = nn.Conv1d(768, 512, kernel_size=3)
+        self.l0 = nn.Linear(512 + 768, 512)
         self.l1 = nn.Linear(512, 512)
         self.l2 = nn.Linear(512, 1)
 

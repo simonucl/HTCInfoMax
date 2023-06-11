@@ -32,7 +32,7 @@ def get_sample_position(corpus_filename, on_memory, corpus_lines, stage):
 
 
 class ClassificationDataset(Dataset):
-    def __init__(self, config, vocab, stage='TRAIN', on_memory=True, corpus_lines=None, mode="TRAIN"):
+    def __init__(self, config, vocab, stage='TRAIN', on_memory=True, corpus_lines=None, mode="TRAIN", bert_tokenizer=None):
         """
         Dataset for text classification based on torch.utils.data.dataset.Dataset
         :param config: helper.configure, Configure Object
@@ -55,6 +55,8 @@ class ClassificationDataset(Dataset):
         self.sample_position = get_sample_position(self.corpus_file, self.on_memory, corpus_lines, stage)
         self.corpus_size = len(self.sample_position)
         self.mode = mode
+
+        self.tokenizer = bert_tokenizer
 
     def __len__(self):
         """
@@ -80,6 +82,31 @@ class ClassificationDataset(Dataset):
             sample_str = self.data[index]
         return self._preprocess_sample(sample_str)
 
+    def create_features(self, sentences, max_seq_len=256):
+        tokens_a = self.tokenizer.tokenize(sentences)
+        tokens_b = None
+
+        if len(tokens_a) > max_seq_len - 2:
+            tokens_a = tokens_a[:max_seq_len - 2]
+        tokens = ['[CLS]'] + tokens_a + ['[SEP]']
+        segment_ids = [0] * len(tokens)
+
+        input_ids = self.tokenizer.convert_tokens_to_ids(tokens)
+        input_mask = [1] * len(input_ids)
+        padding = [0] * (max_seq_len - len(input_ids))
+        input_len = len(input_ids)
+
+        input_ids   += padding
+        input_mask  += padding
+        segment_ids += padding
+
+        assert len(input_ids) == max_seq_len
+        assert len(input_mask) == max_seq_len
+        assert len(segment_ids) == max_seq_len
+
+        feature = {'input_ids': input_ids, 'input_mask': input_mask, 'segment_ids': segment_ids, 'input_len': input_len}
+        return feature
+    
     def _preprocess_sample(self, sample_str):
         """
         preprocess each sample with the limitation of maximum length and pad each sample to maximum length
@@ -91,6 +118,11 @@ class ClassificationDataset(Dataset):
         for k in raw_sample.keys():
             if k == 'token':
                 sample[k] = [self.vocab.v2i[k].get(v.lower(), self.vocab.oov_index) for v in raw_sample[k]]
+                sentences = " ".join(raw_sample[k])
+                features = self.create_features(sentences, self.max_input_length)
+                for (features_k, features_v) in features.items():
+                    sample[features_k] = features_v
+                    
             else:
                 sample[k] = []
                 for v in raw_sample[k]:

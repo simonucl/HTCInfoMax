@@ -67,8 +67,8 @@ class HiAGMLA(nn.Module):
         :param label_f ->  torch.FloatTensor, (N, dim)
         :return: label_align ->  torch.FloatTensor, (batch, N, dim)
         """
-        att = torch.matmul(text_f, label_f.transpose(0, 1))
-        weight_label = functional.softmax(att.transpose(1, 2), dim=-1)
+        att = torch.matmul(text_f, label_f.transpose(0, 1)) # (batch_size, K, N)
+        weight_label = functional.softmax(att.transpose(1, 2), dim=-1) # (batch_size, N, K)
         label_align = torch.matmul(weight_label, text_f)
         return label_align
 

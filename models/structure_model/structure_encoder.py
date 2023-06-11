@@ -59,7 +59,7 @@ class StructureEncoder(nn.Module):
         self.model = MODEL_MODULE[graph_model_type](num_nodes=len(self.label_map),
                                                     in_matrix=self.node_prob_from_child,
                                                     out_matrix=self.node_prob_from_parent,
-                                                    in_dim=config.structure_encoder.node.dimension,
+                                                    in_dim=config.embedding.label.dimension,
                                                     dropout=config.structure_encoder.node.dropout,
                                                     device=device,
                                                     root=self.root,
