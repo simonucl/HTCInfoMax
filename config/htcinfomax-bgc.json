@@ -1,0 +1,108 @@
+{
+  "data": {
+    "dataset": "bgc",
+    "data_dir": "data",
+    "train_file": "bgc_train.json",
+    "val_file": "bgc_val.json",
+    "test_file": "bgc_test.json",
+    "prob_json": "bgc_prob.json",
+    "hierarchy": "bgc.taxonomy"
+  },
+  "vocabulary": {
+    "dir": "vocab_bgc",
+    "vocab_dict": "word.dict",
+    "max_token_vocab": 60000,
+    "label_dict": "label.dict"
+  },
+  "embedding": {
+    "token": {
+      "dimension": 300,
+      "type": "pretrain",
+      "pretrained_file": "./glove.6B/glove.6B.300d.txt",
+      "dropout": 0.5,
+      "init_type": "uniform"
+    },
+    "label": {
+      "dimension": 768,
+      "type": "random",
+      "dropout": 0.5,
+      "init_type": "kaiming_uniform"
+    }
+  },
+  "text_encoder": {
+    "max_length": 256,
+    "RNN": {
+      "bidirectional": true,
+      "num_layers": 1,
+      "type": "GRU",
+      "hidden_dimension": 150,
+      "dropout": 0.1
+    },
+    "CNN": {
+      "kernel_size": [2, 3, 4],
+      "num_kernel": 100
+    },
+    "topK_max_pooling": 1
+  },
+  "structure_encoder": {
+    "type": "GCN",
+    "node": {
+      "type": "text",
+      "dimension": 300,
+      "dropout": 0.05
+    }
+  },
+  "model": {
+    "type": "HTCInfoMax-bert",
+    "linear_transformation": {
+      "text_dimension": 768,
+      "node_dimension": 300,
+      "dropout": 0.1
+    },
+    "classifier": {
+      "num_layer": 1,
+      "dropout": 0.5
+    }
+  },
+  "train": {
+    "optimizer": {
+      "type": "Adam",
+      "learning_rate": 2e-5,
+      "lr_decay": 1.00,
+      "lr_patience": 5,
+      "early_stopping": 200
+    },
+    "batch_size": 32,
+    "start_epoch": 0,
+    "end_epoch": 200,
+    "loss": {
+      "classification": "BCEWithLogitsLoss",
+      "recursive_regularization": {
+        "flag": true,
+        "penalty": 0.000001
+      }
+    },
+    "device_setting": {
+      "device": "cuda",
+      "visible_device_list": "1",
+      "num_workers": 10
+    },
+    "checkpoint": {
+      "dir": "bgc_htcinfomax_checkpoint",
+      "max_number": 10,
+      "save_best": ["Macro_F1", "Micro_F1"]
+    }
+  },
+  "eval": {
+    "batch_size": 32,
+    "threshold": 0.5
+  },
+   "test": {
+    "best_checkpoint": "best_micro_HTCInfoMax",
+    "batch_size": 32
+  },
+  "log": {
+    "level": "info",
+    "filename": "htcinfomax-bgc-v2.log"
+  }
+}
